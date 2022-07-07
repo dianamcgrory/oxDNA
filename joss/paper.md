@@ -8,17 +8,17 @@ tags:
   - Molecular simulations
 authors:
   - name: Erik Poppleton
-  	orcid:  0000-0002-5146-5970 
+    orcid:  0000-0002-5146-5970 
     affiliation: 1
   - name: Michael Matthies
-  	orcid: 
+    orcid: 
     affiliation: 1
   - name: Flavio Romano
-  	orcid: 
-  	affiliation: 2
+    orcid: 
+    affiliation: 2
   - name: Petr Šulc
-   	orcid: 0000-0003-1565-6769
-   	affiliation: 1
+    orcid: 0000-0003-1565-6769
+    affiliation: 1
   - name: Lorenzo Rovigatti^[Corresponding author]
     orcid: 0000-0001-5017-2829
     affiliation: "3, 4"
