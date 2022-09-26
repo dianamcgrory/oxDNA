@@ -42,7 +42,7 @@ bibliography: paper.bib
 
 # Summary
 
-The fields of DNA and RNA nanotechnology have progressed from pioneering, proof-of-principle experiments to fully-fledged applications in material science, biology and medicine. These applications exploit the intrinsic programmability of nucleic acids to generate nano- and even micro-scale structures with tailored properties. However, the design of the DNA/RNA sequences that self-assemble into a desired structure is not straightforward and often relies on expensive trial-and-error experimental protocols. A complementary approach is provided by computer simulations, which can model biomacromolecules at different levels of detail, ranging from atomistic to continuous, and can be leveraged to investigate the whole range of time- and length-scales relevant for applications.
+The fields of DNA and RNA nanotechnology have progressed from pioneering, proof-of-principle experiments to fully-fledged applications in material science, biology and medicine. These applications exploit the intrinsic programmability of nucleic acids to generate nano- and even micro-scale structures with tailored properties. However, the design of the DNA/RNA sequences that self-assemble into a desired structure is not straightforward and often relies on expensive trial-and-error experimental protocols. A complementary approach is provided by computer simulations, which can model biomacromolecules at different levels of detail, ranging from atomistic to continuous, and can be leveraged to investigate the whole range of time- and length-scales relevant for applications. Here we present `oxDNA`, a software package that has been designed to efficiently run coarse-grained simulations of DNA and RNA and also features an analysis suite aimed at post-processing the analysis of oxDNA/oxRNA trajectories.
 
 # Statement of need
 
@@ -60,13 +60,13 @@ The simulation engine is complemented by an updated version of `oxDNA_analysis_t
 
 # Related software
 
-Molecular dynamics simulations of oxDNA and oxRNA can also be performed with the `LAMMPS` software package, whose efficient parallel-computing algorithms make it possible to simulate large systems on HPC clusters [@oxDNA_LAMMPS]. However, the generic and hyper-customizable nature of the `LAMMPS` package does not lend itself well to being used by non specialists, and it lacks many of the tools required to ease the burden of working with coarse-grained nucleic acids. Therefore, the `oxDNA` simulation package presented here complements the `LAMMPS` version, which also bears the "oxdna" name, rather than competing with it.
+Molecular dynamics simulations of oxDNA and oxRNA can also be performed with the `LAMMPS` software package, whose efficient parallel-computing algorithms make it possible to simulate large systems on HPC clusters [@oxDNA_LAMMPS]. However, at the moment it lacks GPU support, it cannot be used to build free-energy profiles by biasing discrete reaction coordinates (*e.g.* number of correct basepairs) and there are no tools to analyse LAMMPS-generated trajectories such as `oat` [@oat] or `oxview` [@bohlin2022design]. In addition, the LAMMPS engine supports many more (often oxDNA-unrelated) options, which may make it harder to correctly setup oxDNA simulations compared to `oxDNA`. Therefore, the `oxDNA` simulation package presented here complements the `LAMMPS` version, which also bears the "oxdna" name, rather than competing with it.
 
 Finally, we note that there are many software packages that either use `oxDNA` or take as input, output or manipulate configurations generated with the `oxDNA` package. The list comprises `MrDNA` [@MrDNA], `Adenita` [@adenita], `TacoxDNA` [@tacoxDNA], [`oxDNA.org`](https://oxdna.org/) [@oxDNA.org], `scadnano` [@scadnano], `MagicDNA` [@magicdna] and `ENSnano` [@ENSnano].
 
 # Acknowledgements
 
-We acknowledge contributions from R. Harrison, Debesh Mandal, C. Matek, Ferdinando Randisi, W. Smith and Benedict E. K. Snodin. LR acknowledges support from the CINECA award under the ISCRA initiative for the availability of high performance computing resources and support (Iscra B "AssoPoN"), and PS acknowledges support from ONR grant no N000142012094.
+We acknowledge contributions from R. Harrison, C. Matek, F. Randisi, W. Smith and Benedict E. K. Snodin. LR acknowledges support from the CINECA award under the ISCRA initiative for the availability of high performance computing resources and support (Iscra B "AssoPoN"), PS acknowledges support from ONR grant no N000142012094, and DM acknowledges support from the Engineering and Physical Sciences Research Council [grant number EP/N509486/1].
 
 # References
 
