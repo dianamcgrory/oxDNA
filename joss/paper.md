@@ -26,9 +26,9 @@ authors:
     orcid: 0000-0001-5017-2829
     affiliation: "4, 5"
 affiliations:
- - name: School of Molecular Sciences and Center for Molecular Design and Biomimetics, The Biodesign Institute, Arizona State University, USA
+ - name: School of Molecular Sciences and Center for Molecular Design and Biomimetics, The Biodesign Institute, Arizona State University, United States of America
    index: 1
- - name: Department of Materials, Imperial College London, UK
+ - name: Department of Materials, Imperial College London, United Kingdom
    index: 2
  - name: Dipartimento di Scienze Molecolari e Nanosistemi, Universitá Ca Foscari di Venezia, Italy
    index: 3
@@ -54,9 +54,9 @@ Here we present an updated version of the `oxDNA` code, an efficient, multi-tech
 
 The package can also be used to compute nucleic-acid-related quantities such as the energy due to hydrogen bonding or stacking, the distance between groups of nucleotides, the list of hydrogen-bonded nucleotides or of over-stretched bonds, and much more. The analysis can be performed while the simulation is running or on trajectory files produced by finished simulations. 
 
-The version of the code we present here is hosted on GitHub and has been modernized with respect to earlier versions (see *e.g.* [@rovigatti2015comparison]) to exploit the C++-14 and CUDA 11 standards. This new version also includes `oxpy`, a Python library which makes it possible to control the behavior of the simulation using Python scripts, as well as examples that demonstrate how to leverage `oxpy` to write backends to run replica-exchange [@REMD] and well-tempered metadynamics [@metadynamics] simulations which are popular techniques in modern molecular dynamics to improve sampling efficiency.
+The version of the code we present here is hosted on GitHub and has been modernised with respect to earlier versions (see *e.g.* [@rovigatti2015comparison]) to exploit the C++-14 and CUDA 11 standards. This new version also includes `oxpy`, a Python library which makes it possible to control the behaviour of the simulation using Python scripts, as well as examples that demonstrate how to leverage `oxpy` to write backends to run replica-exchange [@REMD] and well-tempered metadynamics [@metadynamics] simulations which are popular techniques in modern molecular dynamics to improve sampling efficiency.
 
-The simulation engine is complemented by an updated version of `oxDNA_analysis_tools` (`oat`) [@oat], a Python library aimed at facilitating the analysis of oxDNA/oxRNA trajectories. `Oat` provides numerous common simulation trajectory analysis tools including alignment, mean structures, subsetting trajectories, distances between nucleotides, interduplex angles, and comparison in hydrogen bonding patterns between the trajectory and an idealized structure. `Oat` was previously published as a standalone Python package [@oat], however, since the initial publication, substantial improvements have been made including a new Cython-based random access file parser which accelerated computation of mean structures by more than 10x, and close integration with `oxpy`, which sped up and simplified calculation of nucleotide interactions by more than 100x. `Oat` was developed with the intention of facilitating other, more specific, analysis tasks. The file readers and utility functions are available for import into users' Python projects and the scripts themselves are well-commented to serve as examples for users to extend them for their own needs.
+The simulation engine is complemented by an updated version of `oxDNA_analysis_tools` (`oat`) [@oat], a Python library aimed at facilitating the analysis of oxDNA/oxRNA trajectories. `Oat` provides numerous common simulation trajectory analysis tools including alignment, mean structures, subsetting trajectories, distances between nucleotides, interduplex angles, and comparison in hydrogen bonding patterns between the trajectory and an idealised structure. `Oat` was previously published as a standalone Python package [@oat], however, since the initial publication, substantial improvements have been made including a new Cython-based random access file parser which accelerated computation of mean structures by more than 10x, and close integration with `oxpy`, which sped up and simplified calculation of nucleotide interactions by more than 100x. `Oat` was developed with the intention of facilitating other, more specific, analysis tasks. The file readers and utility functions are available for import into users' Python projects and the scripts themselves are well-commented to serve as examples for users to extend them for their own needs.
 
 # Related software
 
