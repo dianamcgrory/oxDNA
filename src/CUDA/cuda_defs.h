@@ -52,6 +52,8 @@
 #include <cuda.h>
 #include <cuda_runtime_api.h>
 
+#include "cuda_utils/custom_vectors.cuh"
+
 /**
  * @brief Utility struct used by CUDA class to store information about kernel configurations.
  */
@@ -60,25 +62,6 @@ typedef struct CUDA_kernel_cfg {
 	int threads_per_block;
 	int shared_mem;
 } CUDA_kernel_cfg;
-
-/**
- * @brief We need this struct because the fourth element of such a structure must be a float or _float_as_int will not work.
- */
-typedef struct
-__align__(16) {
-	double x, y, z;
-	float w;
-} LR_double4;
-
-#ifdef CUDA_DOUBLE_PRECISION
-using c_number4 = LR_double4;
-using c_number = double;
-using GPU_quat = double4;
-#else
-using c_number4 = float4;
-using c_number = float;
-using GPU_quat = float4;
-#endif
 
 /**
  * @brief It keeps track of neighbours along 3" and 5" directions.

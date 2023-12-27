@@ -38,8 +38,9 @@ public:
 
 	}
 
-	__forceinline__ __device__ c_number4 minimum_image(const c_number4 &r_i, const c_number4 &r_j) const {
-		c_number4 res;
+	template<typename T>
+	__forceinline__ __device__ c_number4 minimum_image(const T &r_i, const T &r_j) const {
+		T res;
 		res.x = r_j.x - r_i.x;
 		res.y = r_j.y - r_i.y;
 		res.z = r_j.z - r_i.z;
@@ -51,8 +52,9 @@ public:
 		return res;
 	}
 
-	__forceinline__ __device__ c_number sqr_minimum_image(const c_number4 &r_i, const c_number4 &r_j) const {
-		c_number4 mi = minimum_image(r_i, r_j);
+	template<typename T>
+	__forceinline__ __device__ c_number sqr_minimum_image(const T &r_i, const T &r_j) const {
+		T mi = minimum_image(r_i, r_j);
 		return SQR(mi.x) + SQR(mi.y) + SQR(mi.z);
 	}
 

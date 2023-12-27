@@ -36,8 +36,9 @@ __device__ void _update_stress_tensor(CUDAStressTensor &st, const c_number4 &r, 
 	st.e[5] -= r.y * force.z * factor;
 }
 
-//This is the most commonly called quaternion to matrix conversion. 
-__forceinline__ __device__ void get_vectors_from_quat(const GPU_quat &q, c_number4 &a1, c_number4 &a2, c_number4 &a3) {
+// This is the most commonly called quaternion to matrix conversion.
+template<typename vector>
+__forceinline__ __device__ void get_vectors_from_quat(const GPU_quat &q, vector &a1, vector &a2, vector &a3) {
 	c_number sqx = q.x * q.x;
 	c_number sqy = q.y * q.y;
 	c_number sqz = q.z * q.z;
@@ -133,7 +134,8 @@ __forceinline__ __device__ int get_particle_btype(const c_number4 &r_i) {
 	return __float_as_int(r_i.w) >> 22;
 }
 
-__forceinline__ __device__ c_number quad_distance(const c_number4 &r_i, const c_number4 &r_j) {
+template<typename vector>
+__forceinline__ __device__ c_number quad_distance(const vector &r_i, const vector &r_j) {
 	const c_number dx = r_j.x - r_i.x;
 	const c_number dy = r_j.y - r_i.y;
 	const c_number dz = r_j.z - r_i.z;
@@ -177,30 +179,20 @@ __forceinline__ __host__ __device__ c_number4 make_c_number4(const c_number x, c
 	return ret;
 }
 
-__forceinline__ __device__ c_number _module(const c_number4 &v) {
-	return sqrtf(SQR(v.x) + SQR(v.y) + SQR(v.z));
-}
-
-__forceinline__ __device__ c_number _module(const float3 &v) {
-	return sqrtf(SQR(v.x) + SQR(v.y) + SQR(v.z));
-}
-
 // Necessary to for calculating the torque without storing a separate GPU_matrix on the GPU. Since we have the a1, a2, and a3 vectors anyway, I don't think this is costly. This step might be avoidable if torque and angular momentum were also calculated and stored as quaternions.
-__forceinline__ __device__ c_number4 _vectors_c_number4_product(const c_number4 a1, const c_number4 a2, const c_number4 a3, const c_number4 v) {
+template<typename o_vector>
+__forceinline__ __device__ c_number4 _vectors_c_number4_product(const o_vector &a1, const o_vector &a2, const o_vector &a3, const c_number4 v) {
 	c_number4 res = { a1.x * v.x + a2.x * v.y + a3.x * v.z, a1.y * v.x + a2.y * v.y + a3.y * v.z, a1.z * v.x + a2.z * v.y + a3.z * v.z, v.w };
 
 	return res;
 }
 
 // Necessary to for calculating the torque without storing a separate GPU_matrix on the GPU. Since we have the a1, a2, and a3 vectors anyway, I don't think this is costly. This step might be avoidable if torque and angular momentum were also calculated and stored as quaternions.
-__forceinline__ __device__ c_number4 _vectors_transpose_c_number4_product(const c_number4 a1, const c_number4 a2, const c_number4 a3, const c_number4 v) {
+template<typename o_vector>
+__forceinline__ __device__ c_number4 _vectors_transpose_c_number4_product(const o_vector &a1, const o_vector &a2, const o_vector &a3, const c_number4 v) {
 	c_number4 res = { a1.x * v.x + a1.y * v.y + a1.z * v.z, a2.x * v.x + a2.y * v.y + a2.z * v.z, a3.x * v.x + a3.y * v.y + a3.z * v.z, v.w };
 
 	return res;
-}
-
-__forceinline__ __device__ c_number4 _cross(const c_number4 v, const c_number4 w) {
-	return make_c_number4(v.y * w.z - v.z * w.y, v.z * w.x - v.x * w.z, v.x * w.y - v.y * w.x, (c_number) 0);
 }
 
 // LR_DOUBLE4
@@ -364,12 +356,6 @@ __forceinline__ __device__ void operator-=(float4 &a, float4 b) {
 	a.y -= b.y;
 	a.z -= b.z;
 	a.w += b.w;
-}
-
-__forceinline__ __device__ c_number4 stably_normalised(const c_number4 &v) {
-	c_number max = fmaxf(fmaxf(fabsf(v.x), fabsf(v.y)), fabsf(v.z));
-	c_number4 res = v / max;
-	return res / _module(res);
 }
 
 #endif /* CUDA_LR_COMMON */

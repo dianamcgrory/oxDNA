@@ -40,10 +40,11 @@ __constant__ bool MD_dh_half_charged_ends[1];
 
 #include "../cuda_utils/CUDA_lr_common.cuh"
 
-__forceinline__ __device__ void _excluded_volume(const c_number4 &r, c_number4 &F, c_number sigma, c_number rstar, c_number b, c_number rc) {
+__forceinline__ __device__ c_number _excluded_volume(const c_number3 &r, c_number3 &F, c_number sigma, c_number rstar, c_number b, c_number rc) {
 	c_number rsqr = CUDA_DOT(r, r);
 
-	F.x = F.y = F.z = F.w = (c_number) 0.f;
+	F.x = F.y = F.z = (c_number) 0.f;
+	c_number energy = 0.f;
 	if(rsqr < SQR(rc)) {
 		if(rsqr > SQR(rstar)) {
 			c_number rmod = sqrt(rsqr);
@@ -52,7 +53,7 @@ __forceinline__ __device__ void _excluded_volume(const c_number4 &r, c_number4 &
 			F.x = r.x * fmod;
 			F.y = r.y * fmod;
 			F.z = r.z * fmod;
-			F.w = EXCL_EPS * b * SQR(rrc);
+			energy = EXCL_EPS * b * SQR(rrc);
 		}
 		else {
 			c_number lj_part = CUB(SQR(sigma)/rsqr);
@@ -60,9 +61,11 @@ __forceinline__ __device__ void _excluded_volume(const c_number4 &r, c_number4 &
 			F.x = r.x * fmod;
 			F.y = r.y * fmod;
 			F.z = r.z * fmod;
-			F.w = 4.f * EXCL_EPS * (SQR(lj_part) - lj_part);
+			energy = 4.f * EXCL_EPS * (SQR(lj_part) - lj_part);
 		}
 	}
+
+	return energy;
 }
 
 __forceinline__ __device__ c_number _f1(c_number r, int type, int n3, int n5) {
@@ -205,74 +208,76 @@ __forceinline__ __device__ c_number _f5D(c_number f, int type) {
 }
 
 template<bool qIsN3>
-__device__ void _bonded_excluded_volume(const c_number4 &r, const c_number4 &n3pos_base, const c_number4 &n3pos_back, const c_number4 &n5pos_base,
-		const c_number4 &n5pos_back, c_number4 &F, c_number4 &T) {
-	c_number4 Ftmp;
+__device__ c_number _bonded_excluded_volume(const c_number3 &r, const c_number3 &n3pos_base, const c_number3 &n3pos_back, const c_number3 &n5pos_base,
+		const c_number3 &n5pos_back, c_number3 &F, c_number3 &T) {
+	c_number3 Ftmp;
 	// BASE-BASE
-	c_number4 rcenter = r + n3pos_base - n5pos_base;
-	_excluded_volume(rcenter, Ftmp, EXCL_S2, EXCL_R2, EXCL_B2, EXCL_RC2);
-	c_number4 torquep1 = (qIsN3) ? _cross(n5pos_base, Ftmp) : _cross(n3pos_base, Ftmp);
+	c_number3 rcenter = r + n3pos_base - n5pos_base;
+	c_number energy = _excluded_volume(rcenter, Ftmp, EXCL_S2, EXCL_R2, EXCL_B2, EXCL_RC2);
+	c_number3 torquep1 = (qIsN3) ? _cross(n5pos_base, Ftmp) : _cross(n3pos_base, Ftmp);
 	F += Ftmp;
 
 	// n5-BASE vs. n3-BACK
 	rcenter = r + n3pos_back - n5pos_base;
-	_excluded_volume(rcenter, Ftmp, EXCL_S3, EXCL_R3, EXCL_B3, EXCL_RC3);
-	c_number4 torquep2 = (qIsN3) ? _cross(n5pos_base, Ftmp) : _cross(n3pos_back, Ftmp);
+	energy += _excluded_volume(rcenter, Ftmp, EXCL_S3, EXCL_R3, EXCL_B3, EXCL_RC3);
+	c_number3 torquep2 = (qIsN3) ? _cross(n5pos_base, Ftmp) : _cross(n3pos_back, Ftmp);
 	F += Ftmp;
 
 	// n5-BACK vs. n3-BASE
 	rcenter = r + n3pos_base - n5pos_back;
-	_excluded_volume(rcenter, Ftmp, EXCL_S4, EXCL_R4, EXCL_B4, EXCL_RC4);
-	c_number4 torquep3 = (qIsN3) ? _cross(n5pos_back, Ftmp) : _cross(n3pos_base, Ftmp);
+	energy += _excluded_volume(rcenter, Ftmp, EXCL_S4, EXCL_R4, EXCL_B4, EXCL_RC4);
+	c_number3 torquep3 = (qIsN3) ? _cross(n5pos_back, Ftmp) : _cross(n3pos_base, Ftmp);
 	F += Ftmp;
 
 	T += torquep1 + torquep2 + torquep3;
+
+	return energy;
 }
 
 template<bool qIsN3>
-__device__ void _bonded_part(const c_number4 &r, const c_number4 &n5pos, const c_number4 &n5x, const c_number4 &n5y, const c_number4 &n5z, const c_number4 &n3pos, const c_number4 &n3x,
-		const c_number4 &n3y, const c_number4 &n3z, c_number4 &F, c_number4 &T, bool grooving, bool use_oxDNA2_FENE, bool use_mbf,
+__device__ void _bonded_part(const c_number3 &r, const c_number4 &n5pos, const c_number3 &n5x, const c_number3 &n5y, const c_number3 &n5z, const c_number4 &n3pos, const c_number3 &n3x,
+		const c_number3 &n3y, const c_number3 &n3z, c_number4 &F, c_number3 &T, bool grooving, bool use_oxDNA2_FENE, bool use_mbf,
 		c_number mbf_xmax, c_number mbf_finf) {
 
 	int n3type = get_particle_type(n3pos);
 	int n5type = get_particle_type(n5pos);
 
-	c_number4 n5pos_back;
+	c_number3 n5pos_back;
 	if(grooving) n5pos_back = n5x * POS_MM_BACK1 + n5y * POS_MM_BACK2;
 	else n5pos_back = n5x * POS_BACK;
 
-	c_number4 n5pos_base = n5x * POS_BASE;
-	c_number4 n5pos_stack = n5x * POS_STACK;
+	c_number3 n5pos_base = n5x * POS_BASE;
+	c_number3 n5pos_stack = n5x * POS_STACK;
 
-	c_number4 n3pos_back;
+	c_number3 n3pos_back;
 	if(grooving) n3pos_back = n3x * POS_MM_BACK1 + n3y * POS_MM_BACK2;
 	else n3pos_back = n3x * POS_BACK;
-	c_number4 n3pos_base = n3x * POS_BASE;
-	c_number4 n3pos_stack = n3x * POS_STACK;
+	c_number3 n3pos_base = n3x * POS_BASE;
+	c_number3 n3pos_stack = n3x * POS_STACK;
 
-	c_number4 rback = r + n3pos_back - n5pos_back;
+	c_number3 rback = r + n3pos_back - n5pos_back;
 	c_number rbackmod = _module(rback);
 	c_number rbackr0;
 	if(use_oxDNA2_FENE) rbackr0 = rbackmod - FENE_R0_OXDNA2;
 	else rbackr0 = rbackmod - FENE_R0_OXDNA;
 
-	c_number4 Ftmp;
+	c_number3 Ftmp;
 	if(use_mbf == true && fabsf(rbackr0) > mbf_xmax) {
 		// this is the "relax" potential, i.e. the standard FENE up to xmax and then something like A + B log(r) for r>xmax
 		c_number fene_xmax = -(FENE_EPS / 2.f) * logf(1.f - mbf_xmax * mbf_xmax / FENE_DELTA2);
 		c_number mbf_fmax = (FENE_EPS * mbf_xmax / (FENE_DELTA2 - SQR(mbf_xmax)));
 		c_number long_xmax = (mbf_fmax - mbf_finf) * mbf_xmax * logf(mbf_xmax) + mbf_finf * mbf_xmax;
 		Ftmp = rback * (copysignf(1.f, rbackr0) * ((mbf_fmax - mbf_finf) * mbf_xmax / fabsf(rbackr0) + mbf_finf) / rbackmod);
-		Ftmp.w = (mbf_fmax - mbf_finf) * mbf_xmax * logf(fabsf(rbackr0)) + mbf_finf * fabsf(rbackr0) - long_xmax + fene_xmax;
+		F.w += (mbf_fmax - mbf_finf) * mbf_xmax * logf(fabsf(rbackr0)) + mbf_finf * fabsf(rbackr0) - long_xmax + fene_xmax;
 	}
 	else {
 		Ftmp = rback * ((FENE_EPS * rbackr0 / (FENE_DELTA2 - SQR(rbackr0))) / rbackmod);
-		Ftmp.w = -FENE_EPS * ((c_number) 0.5f) * logf(1 - SQR(rbackr0) / FENE_DELTA2);
+		F.w += -FENE_EPS * ((c_number) 0.5f) * logf(1 - SQR(rbackr0) / FENE_DELTA2);
 	}
 
-	c_number4 Ttmp = (qIsN3) ? _cross(n5pos_back, Ftmp) : _cross(n3pos_back, Ftmp);
+	c_number3 Ttmp = (qIsN3) ? _cross(n5pos_back, Ftmp) : _cross(n3pos_back, Ftmp);
 	// EXCLUDED VOLUME
-	_bonded_excluded_volume<qIsN3>(r, n3pos_base, n3pos_back, n5pos_base, n5pos_back, Ftmp, Ttmp);
+	F.w += _bonded_excluded_volume<qIsN3>(r, n3pos_base, n3pos_back, n5pos_base, n5pos_back, Ftmp, Ttmp);
 
 	if(qIsN3) {
 		F += Ftmp;
@@ -284,14 +289,14 @@ __device__ void _bonded_part(const c_number4 &r, const c_number4 &n5pos, const c
 	}
 
 	// STACKING
-	c_number4 rstack = r + n3pos_stack - n5pos_stack;
+	c_number3 rstack = r + n3pos_stack - n5pos_stack;
 	c_number rstackmod = _module(rstack);
-	c_number4 rstackdir = make_c_number4(rstack.x / rstackmod, rstack.y / rstackmod, rstack.z / rstackmod, 0);
+	c_number3 rstackdir(rstack.x / rstackmod, rstack.y / rstackmod, rstack.z / rstackmod);
 	// This is the position the backbone would have with major-minor grooves the same width.
 	// We need to do this to implement different major-minor groove widths because rback is
 	// used as a reference point for things that have nothing to do with the actual backbone
 	// position (in this case, the stacking interaction).
-	c_number4 rbackref = r + n3x * POS_BACK - n5x * POS_BACK;
+	c_number3 rbackref = r + n3x * POS_BACK - n5x * POS_BACK;
 	c_number rbackrefmod = _module(rbackref);
 
 	c_number t4 = CUDA_LRACOS(CUDA_DOT(n3z, n5z));
@@ -386,7 +391,7 @@ __device__ void _bonded_part(const c_number4 &r, const c_number4 &n5pos, const c
 
 		Ttmp += force_part_phi2 * dcosphi2da2b1 * _cross(n5x, n3y) + _cross(n5x, n3x) * force_part_phi2 * dcosphi2da1b1;
 
-		Ftmp.w = energy;
+		F.w += energy;
 		if(qIsN3) {
 			// THETA 5
 			Ttmp += stably_normalised(_cross(rstackdir, n5z)) * energy * f4t5D / f4t5;
@@ -404,8 +409,8 @@ __device__ void _bonded_part(const c_number4 &r, const c_number4 &n5pos, const c
 	}
 }
 
-__device__ void _particle_particle_DNA_interaction(const c_number4 &r, const c_number4 &ppos, const c_number4 &a1, const c_number4 &a2, const c_number4 &a3,
-		const c_number4 &qpos, const c_number4 &b1,	const c_number4 &b2, const c_number4 &b3, c_number4 &F, c_number4 &T, bool grooving,
+__device__ void _particle_particle_DNA_interaction(const c_number3 &r, const c_number4 &ppos, const c_number3 &a1, const c_number3 &a2, const c_number3 &a3,
+		const c_number4 &qpos, const c_number3 &b1,	const c_number3 &b2, const c_number3 &b3, c_number4 &F, c_number4 &T, bool grooving,
 		bool use_debye_huckel, bool use_oxDNA2_coaxial_stacking,
 		bool p_is_end, bool q_is_end) {
 	int ptype = get_particle_type(ppos);
@@ -414,23 +419,23 @@ __device__ void _particle_particle_DNA_interaction(const c_number4 &r, const c_n
 	int qbtype = get_particle_btype(qpos);
 	int int_type = pbtype + qbtype;
 
-	c_number4 ppos_back = (grooving) ? POS_MM_BACK1 * a1 + POS_MM_BACK2 * a2 : POS_BACK * a1;
-	c_number4 ppos_base = POS_BASE * a1;
-	c_number4 ppos_stack = POS_STACK * a1;
+	c_number3 ppos_back = (grooving) ? POS_MM_BACK1 * a1 + POS_MM_BACK2 * a2 : POS_BACK * a1;
+	c_number3 ppos_base = POS_BASE * a1;
+	c_number3 ppos_stack = POS_STACK * a1;
 
-	c_number4 qpos_back = (grooving) ? POS_MM_BACK1 * b1 + POS_MM_BACK2 * b2 : POS_BACK * b1;
-	c_number4 qpos_base = POS_BASE * b1;
-	c_number4 qpos_stack = POS_STACK * b1;
+	c_number3 qpos_back = (grooving) ? POS_MM_BACK1 * b1 + POS_MM_BACK2 * b2 : POS_BACK * b1;
+	c_number3 qpos_base = POS_BASE * b1;
+	c_number3 qpos_stack = POS_STACK * b1;
 
 	c_number tot_Tw = T.w;
 
 	// excluded volume
 	// BACK-BACK
-	c_number4 Ftmp = make_c_number4(0, 0, 0, 0);
-	c_number4 rbackbone = r + qpos_back - ppos_back;
-	_excluded_volume(rbackbone, Ftmp, EXCL_S1, EXCL_R1, EXCL_B1, EXCL_RC1);
-	c_number4 Ttmp = _cross(ppos_back, Ftmp);
-	_bonded_excluded_volume<true>(r, qpos_base, qpos_back, ppos_base, ppos_back, Ftmp, Ttmp);
+	c_number3 Ftmp;
+	c_number3 rbackbone = r + qpos_back - ppos_back;
+	F.w += _excluded_volume(rbackbone, Ftmp, EXCL_S1, EXCL_R1, EXCL_B1, EXCL_RC1);
+	c_number3 Ttmp = _cross(ppos_back, Ftmp);
+	F.w += _bonded_excluded_volume<true>(r, qpos_base, qpos_back, ppos_base, ppos_back, Ftmp, Ttmp);
 
 	F += Ftmp;
 
@@ -438,14 +443,14 @@ __device__ void _particle_particle_DNA_interaction(const c_number4 &r, const c_n
 	if(use_debye_huckel) {
 		c_number rbackmod = _module(rbackbone);
 		if(rbackmod < MD_dh_RC[0]) {
-			c_number4 rbackdir = rbackbone / rbackmod;
+			c_number3 rbackdir = rbackbone / rbackmod;
 			if(rbackmod < MD_dh_RHIGH[0]) {
 				Ftmp = rbackdir * (-MD_dh_prefactor[0] * expf(MD_dh_minus_kappa[0] * rbackmod) * (MD_dh_minus_kappa[0] / rbackmod - 1.0f / SQR(rbackmod)));
-				Ftmp.w = expf(rbackmod * MD_dh_minus_kappa[0]) * (MD_dh_prefactor[0] / rbackmod);
+				F.w += expf(rbackmod * MD_dh_minus_kappa[0]) * (MD_dh_prefactor[0] / rbackmod);
 			}
 			else {
 				Ftmp = rbackdir * (-2.0f * MD_dh_B[0] * (rbackmod - MD_dh_RC[0]));
-				Ftmp.w = MD_dh_B[0] * SQR(rbackmod - MD_dh_RC[0]);
+				F.w += MD_dh_B[0] * SQR(rbackmod - MD_dh_RC[0]);
 			}
 
 			// check for half-charge strand ends
@@ -462,13 +467,13 @@ __device__ void _particle_particle_DNA_interaction(const c_number4 &r, const c_n
 	}
 
 	// HYDROGEN BONDING
-	c_number4 rhydro = r + qpos_base - ppos_base;
+	c_number3 rhydro = r + qpos_base - ppos_base;
 	c_number rhydromodsqr = CUDA_DOT(rhydro, rhydro);
 	if(int_type == 3 && SQR(HYDR_RCLOW) < rhydromodsqr && rhydromodsqr < SQR(HYDR_RCHIGH)) {
 		c_number hb_multi = (abs(qbtype) >= 300 && abs(pbtype) >= 300) ? MD_hb_multi[0] : 1.f;
 		// versor and magnitude of the base-base separation
 		c_number rhydromod = sqrtf(rhydromodsqr);
-		c_number4 rhydrodir = rhydro / rhydromod;
+		c_number3 rhydrodir = rhydro / rhydromod;
 
 		// angles involved in the HB interaction
 		c_number t1 = CUDA_LRACOS(-CUDA_DOT(a1, b1));
@@ -531,18 +536,18 @@ __device__ void _particle_particle_DNA_interaction(const c_number4 &r, const c_n
 
 			Ttmp += _cross(ppos_base, Ftmp);
 
-			Ftmp.w = hb_energy;
+			F.w += hb_energy;
 			F += Ftmp;
 		}
 	}
 	// END HYDROGEN BONDING
 
 	// CROSS STACKING
-	c_number4 rcstack = rhydro;
+	c_number3 rcstack = rhydro;
 	c_number rcstackmodsqr = rhydromodsqr;
 	if(SQR(CRST_RCLOW) < rcstackmodsqr && rcstackmodsqr < SQR(CRST_RCHIGH)) {
 		c_number rcstackmod = sqrtf(rcstackmodsqr);
-		c_number4 rcstackdir = rcstack / rcstackmod;
+		c_number3 rcstackdir = rcstack / rcstackmod;
 
 		// angles involved in the CSTCK interaction
 		c_number t1 = CUDA_LRACOS(-CUDA_DOT(a1, b1));
@@ -604,7 +609,7 @@ __device__ void _particle_particle_DNA_interaction(const c_number4 &r, const c_n
 
 			Ttmp += _cross(ppos_base, Ftmp);
 
-			Ftmp.w = cstk_energy;
+			F.w += cstk_energy;
 			F += Ftmp;
 		}
 	}
@@ -613,11 +618,11 @@ __device__ void _particle_particle_DNA_interaction(const c_number4 &r, const c_n
 	// oxDNA1's coaxial stacking was a bit different in terms of parameters, and also had an additional term
 	// here we try to avoid duplications by using if statements (which are always true or false and therefore
 	// do not branch out), or use ternary operators (sparsely, since they decrease the readability)
-	c_number4 rstack = r + qpos_stack - ppos_stack;
+	c_number3 rstack = r + qpos_stack - ppos_stack;
 	c_number rstackmodsqr = CUDA_DOT(rstack, rstack);
 	if(SQR(CXST_RCLOW) < rstackmodsqr && rstackmodsqr < SQR(CXST_RCHIGH)) {
 		c_number rstackmod = sqrtf(rstackmodsqr);
-		c_number4 rstackdir = rstack / rstackmod;
+		c_number3 rstackdir = rstack / rstackmod;
 
 		// angles involved in the CXST interaction
 		c_number t1 = CUDA_LRACOS(-CUDA_DOT(a1, b1));
@@ -635,9 +640,9 @@ __device__ void _particle_particle_DNA_interaction(const c_number4 &r, const c_n
 			// We need to do this to implement different major-minor groove widths because rback is
 			// used as a reference point for things that have nothing to do with the actual backbone
 			// position (in this case, the coaxial stacking interaction).
-			c_number4 rbackboneref = r + POS_BACK * b1 - POS_BACK * a1;
+			c_number3 rbackboneref = r + POS_BACK * b1 - POS_BACK * a1;
 			rbackrefmod = _module(rbackboneref);
-			c_number4 rbackbonerefdir = rbackboneref / rbackrefmod;
+			c_number3 rbackbonerefdir = rbackboneref / rbackrefmod;
 			cosphi3 = CUDA_DOT(rstackdir, (_cross(rbackbonerefdir, a1)));
 			f5cosphi3 = _f5(cosphi3, CXST_F5_PHI3);
 		}
@@ -713,7 +718,7 @@ __device__ void _particle_particle_DNA_interaction(const c_number4 &r, const c_n
 			}
 
 			Ttmp += _cross(ppos_stack, Ftmp);
-			Ftmp.w = cxst_energy;
+			F.w += cxst_energy;
 			F += Ftmp;
 		}
 	}
@@ -738,16 +743,16 @@ __global__ void dna_forces_edge_nonbonded(const c_number4 __restrict__ *poss, co
 	c_number4 ppos = poss[b.from];
 	bool p_is_end = (use_debye_huckel) ? is_strand_end[b.from] : false;
 	// particle axes according to Allen's paper
-	c_number4 a1, a2, a3;
+	c_number3 a1, a2, a3;
 	get_vectors_from_quat(orientations[b.from], a1, a2, a3);
 
 	// get info for particle 2
 	c_number4 qpos = poss[b.to];
 	bool q_is_end = (use_debye_huckel) ? is_strand_end[b.to] : false;
-	c_number4 b1, b2, b3;
+	c_number3 b1, b2, b3;
 	get_vectors_from_quat(orientations[b.to], b1, b2, b3);
 
-	c_number4 r = box->minimum_image(ppos, qpos);
+	c_number3 r = box->minimum_image(ppos, qpos);
 	_particle_particle_DNA_interaction(r, ppos, a1, a2, a3, qpos, b1, b2, b3, dF, dT, grooving, use_debye_huckel, use_oxDNA2_coaxial_stacking, p_is_end, q_is_end);
 
 	int from_index = MD_N[0] * (IND % MD_n_forces[0]) + b.from;
@@ -790,32 +795,36 @@ __global__ void dna_forces_edge_bonded(const c_number4 __restrict__ *poss, const
 	CUDAStressTensor p_st;
 
 	// particle axes according to Allen's paper
-	c_number4 a1, a2, a3;
+	c_number3 a1, a2, a3;
 	get_vectors_from_quat(orientations[IND], a1, a2, a3);
 
 	if(bs.n3 != P_INVALID) {
 		c_number4 qpos = poss[bs.n3];
 
-		c_number4 b1, b2, b3;
+		c_number3 b1, b2, b3;
 		get_vectors_from_quat(orientations[bs.n3], b1, b2, b3);
 
-		c_number4 r = qpos - ppos;
+		c_number3 r = qpos - ppos;
 		c_number4 dF = make_c_number4(0, 0, 0, 0);
-		_bonded_part<true>(r, ppos, a1, a2, a3, qpos, b1, b2, b3, dF, T, grooving, use_oxDNA2_FENE, use_mbf, mbf_xmax, mbf_finf);
+		c_number3 dT;
+		_bonded_part<true>(r, ppos, a1, a2, a3, qpos, b1, b2, b3, dF, dT, grooving, use_oxDNA2_FENE, use_mbf, mbf_xmax, mbf_finf);
 		_update_stress_tensor<true>(p_st, r, dF);
 		F += dF;
+		T += dT;
 	}
 	if(bs.n5 != P_INVALID) {
 		c_number4 qpos = poss[bs.n5];
 
-		c_number4 b1, b2, b3;
+		c_number3 b1, b2, b3;
 		get_vectors_from_quat(orientations[bs.n5], b1, b2, b3);
 
-		c_number4 r = ppos - qpos;
+		c_number3 r = ppos - qpos;
 		c_number4 dF = make_c_number4(0, 0, 0, 0);
-		_bonded_part<false>(r, qpos, b1, b2, b3, ppos, a1, a2, a3, dF, T, grooving, use_oxDNA2_FENE, use_mbf, mbf_xmax, mbf_finf);
+		c_number3 dT;
+		_bonded_part<false>(r, qpos, b1, b2, b3, ppos, a1, a2, a3, dF, dT, grooving, use_oxDNA2_FENE, use_mbf, mbf_xmax, mbf_finf);
 		_update_stress_tensor<true>(p_st, -r, dF); // -r since r here is defined as r  = ppos - qpos
 		F += dF;
+		T += dT;
 	}
 
 	// we can do this because dna_forces_edge_nonbonded does not change the reference frame to the torque it calculates
@@ -844,30 +853,34 @@ __global__ void dna_forces(const c_number4 __restrict__ *poss, const GPU_quat __
 	CUDAStressTensor p_st;
 
 	// particle axes according to Allen's paper
-	c_number4 a1, a2, a3;
+	c_number3 a1, a2, a3;
 	get_vectors_from_quat(orientations[IND], a1, a2, a3);
 
 	if(pbonds.n3 != P_INVALID) {
 		c_number4 qpos = poss[pbonds.n3];
-		c_number4 b1, b2, b3;
+		c_number3 b1, b2, b3;
 		get_vectors_from_quat(orientations[pbonds.n3], b1, b2, b3);
 
-		c_number4 r = qpos - ppos;
+		c_number3 r = qpos - ppos;
 		c_number4 dF = make_c_number4(0, 0, 0, 0);
-		_bonded_part<true>(r, ppos, a1, a2, a3, qpos, b1, b2, b3, dF, T, grooving, use_oxDNA2_FENE, use_mbf, mbf_xmax, mbf_finf);
+		c_number3 dT;
+		_bonded_part<true>(r, ppos, a1, a2, a3, qpos, b1, b2, b3, dF, dT, grooving, use_oxDNA2_FENE, use_mbf, mbf_xmax, mbf_finf);
 		_update_stress_tensor<true>(p_st, r, dF);
 		F += dF;
+		T += dT;
 	}
 	if(pbonds.n5 != P_INVALID) {
 		c_number4 qpos = poss[pbonds.n5];
-		c_number4 b1, b2, b3;
+		c_number3 b1, b2, b3;
 		get_vectors_from_quat(orientations[pbonds.n5], b1, b2, b3);
 
-		c_number4 r = ppos - qpos;
+		c_number3 r = ppos - qpos;
 		c_number4 dF = make_c_number4(0, 0, 0, 0);
-		_bonded_part<false>(r, qpos, b1, b2, b3, ppos, a1, a2, a3, dF, T, grooving, use_oxDNA2_FENE, use_mbf, mbf_xmax, mbf_finf);
+		c_number3 dT;
+		_bonded_part<false>(r, qpos, b1, b2, b3, ppos, a1, a2, a3, dF, dT, grooving, use_oxDNA2_FENE, use_mbf, mbf_xmax, mbf_finf);
 		_update_stress_tensor<true>(p_st, -r, dF);
 		F += dF;
+		T += dT;
 	}
 
 	const int type = get_particle_type(ppos);
@@ -879,9 +892,9 @@ __global__ void dna_forces(const c_number4 __restrict__ *poss, const GPU_quat __
 
 		if(k_index != IND && pbonds.n3 != k_index && pbonds.n5 != k_index) {
 			c_number4 qpos = poss[k_index];
-			c_number4 r = box->minimum_image(ppos, qpos);
+			c_number3 r = box->minimum_image(ppos, qpos);
 
-			c_number4 b1, b2, b3;
+			c_number3 b1, b2, b3;
 			get_vectors_from_quat(orientations[k_index], b1, b2, b3);
 			LR_bonds qbonds = bonds[k_index];
 			bool q_is_end = (qbonds.n3 == P_INVALID || qbonds.n5 == P_INVALID);
@@ -906,7 +919,6 @@ __global__ void dna_forces(const c_number4 __restrict__ *poss, const GPU_quat __
 //FFS order parameter pre-calculations
 
 // check whether a particular pair of particles have hydrogen bonding energy lower than a given threshold hb_threshold (which may vary)
-
 __global__ void hb_op_precalc(c_number4 *poss, GPU_quat *orientations, int *op_pairs1, int *op_pairs2, float *hb_energies, int n_threads, bool *region_is_nearhb, CUDABox *box) {
 	if(IND >= n_threads) return;
 
@@ -915,7 +927,7 @@ __global__ void hb_op_precalc(c_number4 *poss, GPU_quat *orientations, int *op_p
 	// get distance between this nucleotide pair's "com"s
 	c_number4 ppos = poss[pind];
 	c_number4 qpos = poss[qind];
-	c_number4 r = box->minimum_image(ppos, qpos);
+	c_number3 r = box->minimum_image(ppos, qpos);
 
 	// check whether hb energy is below a certain threshold for this nucleotide pair
 	int ptype = get_particle_type(ppos);
@@ -928,22 +940,21 @@ __global__ void hb_op_precalc(c_number4 *poss, GPU_quat *orientations, int *op_p
 	GPU_quat qo = orientations[qind];
 
 	//This gets an extra two vectors that are not needed, but the function doesn't seem to be called at all, so should make no difference. 
-	c_number4 a1, a2, a3, b1, b2, b3;
+	c_number3 a1, a2, a3, b1, b2, b3;
 	get_vectors_from_quat(po, a1, a2, a3);
-
 	get_vectors_from_quat(qo, b1, b2, b3);
 
-	c_number4 ppos_base = POS_BASE * a1;
-	c_number4 qpos_base = POS_BASE * b1;
+	c_number3 ppos_base = POS_BASE * a1;
+	c_number3 qpos_base = POS_BASE * b1;
 
 	// HYDROGEN BONDING
 	c_number hb_energy = (c_number) 0;
-	c_number4 rhydro = r + qpos_base - ppos_base;
+	c_number3 rhydro = r + qpos_base - ppos_base;
 	c_number rhydromodsqr = CUDA_DOT(rhydro, rhydro);
 	if(int_type == 3 && SQR(HYDR_RCLOW) < rhydromodsqr && rhydromodsqr < SQR(HYDR_RCHIGH)) {
 		// versor and magnitude of the base-base separation
 		c_number rhydromod = sqrtf(rhydromodsqr);
-		c_number4 rhydrodir = rhydro / rhydromod;
+		c_number3 rhydrodir = rhydro / rhydromod;
 
 		// angles involved in the HB interaction
 		c_number t1 = CUDA_LRACOS(-CUDA_DOT(a1, b1));
@@ -977,7 +988,7 @@ __global__ void near_hb_op_precalc(c_number4 *poss, GPU_quat *orientations, int 
 	// get distance between this nucleotide pair's "com"s
 	c_number4 ppos = poss[pind];
 	c_number4 qpos = poss[qind];
-	c_number4 r = box->minimum_image(ppos, qpos);
+	c_number3 r = box->minimum_image(ppos, qpos);
 
 	// check whether hb energy is below a certain threshold for this nucleotide pair
 	int ptype = get_particle_type(ppos);
@@ -990,15 +1001,15 @@ __global__ void near_hb_op_precalc(c_number4 *poss, GPU_quat *orientations, int 
 	GPU_quat qo = orientations[qind];
 
 	//This gets extra a2 and b2 vectors that aren't needed. get_vectors_from_quat could easily be modified to only return the relevant vectors, but it will make computationally very little difference, since most of the same c_numbers need to be calculated anyway. Perhaps worth changing for memory considerations, however
-	c_number4 a1, a2, a3, b1, b2, b3;
+	c_number3 a1, a2, a3, b1, b2, b3;
 	get_vectors_from_quat(po, a1, a2, a3);
 	get_vectors_from_quat(qo, b1, b2, b3);
 
-	c_number4 ppos_base = POS_BASE * a1;
-	c_number4 qpos_base = POS_BASE * b1;
+	c_number3 ppos_base = POS_BASE * a1;
+	c_number3 qpos_base = POS_BASE * b1;
 
 	// HYDROGEN BONDING
-	c_number4 rhydro = r + qpos_base - ppos_base;
+	c_number3 rhydro = r + qpos_base - ppos_base;
 	c_number rhydromodsqr = CUDA_DOT(rhydro, rhydro);
 
 	int total_nonzero;
@@ -1006,7 +1017,7 @@ __global__ void near_hb_op_precalc(c_number4 *poss, GPU_quat *orientations, int 
 	if(int_type == 3 && SQR(HYDR_RCLOW) < rhydromodsqr && rhydromodsqr < SQR(HYDR_RCHIGH)) {
 		// versor and magnitude of the base-base separation
 		c_number rhydromod = sqrtf(rhydromodsqr);
-		c_number4 rhydrodir = rhydro / rhydromod;
+		c_number3 rhydrodir = rhydro / rhydromod;
 
 		// angles involved in the HB interaction
 		c_number t1 = CUDA_LRACOS(-CUDA_DOT(a1, b1));
@@ -1057,14 +1068,14 @@ __global__ void dist_op_precalc(c_number4 *poss, GPU_quat *orientations, int *op
 	GPU_quat qo = orientations[qind];
 
 	//This gets extra a2 and b2 vectors that aren't needed. get_vectors_from_quat could easily be modified to only return the relevant vectors, but it will make computationally very little difference, since most of the same c_numbers need to be calculated anyway. Perhaps worth changing for memory considerations, however 
-	c_number4 a1, a2, a3, b1, b2, b3;
+	c_number3 a1, a2, a3, b1, b2, b3;
 	get_vectors_from_quat(po, a1, a2, a3);
 	get_vectors_from_quat(qo, b1, b2, b3);
 
-	c_number4 ppos_base = POS_BASE * a1;
-	c_number4 qpos_base = POS_BASE * b1;
+	c_number3 ppos_base = POS_BASE * a1;
+	c_number3 qpos_base = POS_BASE * b1;
 
-	c_number4 rbase = r + qpos_base - ppos_base;
+	c_number3 rbase = r + qpos_base - ppos_base;
 	op_dists[IND] = _module(rbase);
 }
 
