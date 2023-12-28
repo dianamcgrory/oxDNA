@@ -112,7 +112,8 @@ __forceinline__ __device__ void LR_atomicAdd(c_number4 *dst, const c_number4 &de
 	atomicAdd(&(dst->w), delta.w);
 }
 
-__forceinline__ __device__ void LR_atomicAddXYZ(c_number4 *dst, const c_number4 &delta) {
+template<typename vector>
+__forceinline__ __device__ void LR_atomicAddXYZ(c_number4 *dst, const vector &delta) {
 	atomicAdd(&(dst->x), delta.x);
 	atomicAdd(&(dst->y), delta.y);
 	atomicAdd(&(dst->z), delta.z);
