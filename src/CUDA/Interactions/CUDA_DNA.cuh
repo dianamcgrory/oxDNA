@@ -138,7 +138,10 @@ __forceinline__ __device__ c_number _f4(c_number t, float t0, float ts, float tc
 	t = copysignf(t - t0, (c_number) 1.f);
 
 	if(t < tc) {
-		val = (t > ts) ? b * SQR(tc - t) : 1.f - a * SQR(t);
+		val = 1.f - a * SQR(t);
+		if(t > ts) {
+			val = b * SQR(tc - t);
+		}
 	}
 
 	return val;
@@ -159,7 +162,10 @@ __forceinline__ __device__ c_number _f4D(c_number t, float t0, float ts, float t
 	t = copysignf(t, (c_number) 1.f);
 
 	if(t < tc) {
-		val = (t > ts) ? b * (t - tc) : -a * t;
+		val = -a * t;
+		if(t > ts) {
+			val = b * (t - tc);
+		}
 	}
 
 	return 2.f * m * val;
@@ -405,14 +411,14 @@ __device__ c_number _bonded_part(const c_number3 &r, int n5type, const c_number3
 	return tot_energy;
 }
 
-__device__ float2 _particle_particle_DNA_interaction(const c_number3 &r, const c_number4 &ppos, const c_number3 &a1, const c_number3 &a2, const c_number3 &a3,
-		const c_number4 &qpos, const c_number3 &b1,	const c_number3 &b2, const c_number3 &b3, c_number3 &F, c_number3 &T, bool grooving,
+__device__ float2 _particle_particle_DNA_interaction(const c_number3 &r, const c_number &ppos_4th, const c_number3 &a1, const c_number3 &a2, const c_number3 &a3,
+		const c_number &qpos_4th, const c_number3 &b1,	const c_number3 &b2, const c_number3 &b3, c_number3 &F, c_number3 &T, bool grooving,
 		bool use_debye_huckel, bool use_oxDNA2_coaxial_stacking,
 		bool p_is_end, bool q_is_end) {
-	int ptype = get_particle_type(ppos);
-	int qtype = get_particle_type(qpos);
-	int pbtype = get_particle_btype(ppos);
-	int qbtype = get_particle_btype(qpos);
+	int ptype = get_particle_type(ppos_4th);
+	int qtype = get_particle_type(qpos_4th);
+	int pbtype = get_particle_btype(ppos_4th);
+	int qbtype = get_particle_btype(qpos_4th);
 	int int_type = pbtype + qbtype;
 
 	c_number3 ppos_back = (grooving) ? POS_MM_BACK1 * a1 + POS_MM_BACK2 * a2 : POS_BACK * a1;
@@ -726,7 +732,7 @@ __device__ float2 _particle_particle_DNA_interaction(const c_number3 &r, const c
 }
 
 __global__ void dna_forces_edge_nonbonded(const c_number4 __restrict__ *poss, const GPU_quat __restrict__ *orientations, c_number4 __restrict__ *forces,
-		c_number4 __restrict__ *torques, const edge_bond __restrict__ *edge_list, int n_edges, const int *is_strand_end, bool grooving,
+		c_number4 __restrict__ *torques, const edge_bond __restrict__ *edge_list, int n_edges, const char *is_strand_end, bool grooving,
 		bool use_debye_huckel, bool use_oxDNA2_coaxial_stacking, bool update_st, CUDAStressTensor *st, const CUDABox *box) {
 	if(IND >= n_edges) return;
 
@@ -748,7 +754,7 @@ __global__ void dna_forces_edge_nonbonded(const c_number4 __restrict__ *poss, co
 	get_vectors_from_quat(orientations[b.to], b1, b2, b3);
 
 	c_number3 r = box->minimum_image(ppos, qpos);
-	_particle_particle_DNA_interaction(r, ppos, a1, a2, a3, qpos, b1, b2, b3, dF, dT, grooving, use_debye_huckel, use_oxDNA2_coaxial_stacking, p_is_end, q_is_end);
+	_particle_particle_DNA_interaction(r, ppos.w, a1, a2, a3, qpos.w, b1, b2, b3, dF, dT, grooving, use_debye_huckel, use_oxDNA2_coaxial_stacking, p_is_end, q_is_end);
 
 	int from_index = MD_N[0] * (IND % MD_n_forces[0]) + b.from;
 	int to_index = MD_N[0] * (IND % MD_n_forces[0]) + b.to;
@@ -895,7 +901,7 @@ __global__ void dna_forces(const c_number4 __restrict__ *poss, const GPU_quat __
 			bool q_is_end = (qbonds.n3 == P_INVALID || qbonds.n5 == P_INVALID);
 
 			c_number3 dF, dT;
-			float2 energies = _particle_particle_DNA_interaction(r, ppos, a1, a2, a3, qpos, b1, b2, b3, dF, dT, grooving, use_debye_huckel, use_oxDNA2_coaxial_stacking, p_is_end, q_is_end);
+			float2 energies = _particle_particle_DNA_interaction(r, ppos.w, a1, a2, a3, qpos.w, b1, b2, b3, dF, dT, grooving, use_debye_huckel, use_oxDNA2_coaxial_stacking, p_is_end, q_is_end);
 			_update_stress_tensor<true>(p_st, r, dF);
 			F += dF;
 			F.w += energies.x;
@@ -1077,10 +1083,9 @@ __global__ void dist_op_precalc(c_number4 *poss, GPU_quat *orientations, int *op
 	op_dists[IND] = _module(rbase);
 }
 
-__global__ void init_DNA_strand_ends(int *is_strand_end, const LR_bonds __restrict__ *bonds, int N) {
+__global__ void init_DNA_strand_ends(char *is_strand_end, const LR_bonds __restrict__ *bonds, int N) {
 	if(IND >= N) return;
 
 	LR_bonds pbonds = bonds[IND];
 	is_strand_end[IND] = (pbonds.n3 == P_INVALID || pbonds.n5 == P_INVALID);
 }
-

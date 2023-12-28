@@ -62,10 +62,11 @@ void CUDADNAInteraction::cuda_init(int N) {
 	CUDABaseInteraction::cuda_init(N);
 	DNAInteraction::init();
 
-	float f_copy = this->_hb_multiplier;
-	CUDA_SAFE_CALL(cudaMemcpyToSymbol(MD_hb_multi, &f_copy, sizeof(float)));
+	COPY_NUMBER_TO_FLOAT(MD_hb_multi, this->_hb_multiplier)
 
 	CUDA_SAFE_CALL(cudaMemcpyToSymbol(MD_N, &N, sizeof(int)));
+
+	CUDA_SAFE_CALL(GpuUtils::LR_cudaMalloc<char>(&_d_is_strand_end, sizeof(char) * _N));
 
 	c_number tmp[50];
 	for(int i = 0; i < 2; i++)
@@ -156,7 +157,6 @@ void CUDADNAInteraction::_on_T_update() {
 }
 
 void CUDADNAInteraction::_init_strand_ends(LR_bonds *d_bonds) {
-	CUDA_SAFE_CALL(GpuUtils::LR_cudaMalloc<int>(&_d_is_strand_end, sizeof(int) * _N));
 	init_DNA_strand_ends<<<_launch_cfg.blocks, _launch_cfg.threads_per_block>>>(_d_is_strand_end, d_bonds, _N);
 }
 

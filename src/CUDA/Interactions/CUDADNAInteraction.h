@@ -38,7 +38,7 @@ public:
 	float _debye_huckel_B; // prefactor of the quadratic cut-off
 	float _minus_kappa;
 	// End copy from DNA2Interaction.h
-	int *_d_is_strand_end = nullptr;
+	char *_d_is_strand_end = nullptr;
 
 	void get_settings(input_file &inp) override;
 	void cuda_init(int N) override;

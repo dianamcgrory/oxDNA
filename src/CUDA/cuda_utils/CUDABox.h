@@ -39,8 +39,8 @@ public:
 	}
 
 	template<typename T>
-	__forceinline__ __device__ c_number4 minimum_image(const T &r_i, const T &r_j) const {
-		T res;
+	__forceinline__ __device__ c_number3 minimum_image(const T &r_i, const T &r_j) const {
+		c_number3 res;
 		res.x = r_j.x - r_i.x;
 		res.y = r_j.y - r_i.y;
 		res.z = r_j.z - r_i.z;

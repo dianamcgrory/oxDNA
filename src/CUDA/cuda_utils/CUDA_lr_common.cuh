@@ -131,8 +131,12 @@ __forceinline__ __device__ void LR_atomicAddST(CUDAStressTensor *dst, const CUDA
 /**
  * @brief returns the btype (i.e. the fake nucleotide type used to make only certain pairs of particle interacting through HB)
  */
+__forceinline__ __device__ int get_particle_btype(const c_number &r_4th) {
+	return __float_as_int(r_4th) >> 22;
+}
+
 __forceinline__ __device__ int get_particle_btype(const c_number4 &r_i) {
-	return __float_as_int(r_i.w) >> 22;
+	return get_particle_btype(r_i.w);
 }
 
 template<typename vector>
@@ -144,9 +148,13 @@ __forceinline__ __device__ c_number quad_distance(const vector &r_i, const vecto
 	return dx * dx + dy * dy + dz * dz;
 }
 
-__forceinline__ __device__ int get_particle_type(const c_number4 &r_i) {
-	int my_btype = __float_as_int(r_i.w) >> 22;
+__forceinline__ __device__ int get_particle_type(const c_number &r_4th) {
+	int my_btype = __float_as_int(r_4th) >> 22;
 	return (my_btype > 0) ? (my_btype & 3) : 3 - ((3 - (my_btype)) & 3); // a & 3 is equivalent to a % 4, but much faster
+}
+
+__forceinline__ __device__ int get_particle_type(const c_number4 &r_i) {
+	return get_particle_type(r_i.w);
 }
 
 __forceinline__ __device__ int get_particle_index(const c_number4 &r_i) {
